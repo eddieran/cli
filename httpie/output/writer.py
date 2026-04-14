@@ -14,6 +14,7 @@ from ..models import (
 )
 from .models import ProcessingOptions
 from .processing import Conversion, Formatting
+from .sanitize import sanitize_output
 from .streams import (
     BaseStream, BufferedPrettyStream, EncodedStream, PrettyStream, RawStream,
 )
@@ -43,7 +44,8 @@ def write_message(
         ),
         # NOTE: `env.stdout` will in fact be `stderr` with `--download`
         'outfile': env.stdout,
-        'flush': env.stdout_isatty or processing_options.stream
+        'flush': env.stdout_isatty or processing_options.stream,
+        'sanitize': env.stdout_isatty,
     }
     try:
         if env.is_windows and 'colors' in processing_options.get_prettify(env):
@@ -61,9 +63,17 @@ def write_message(
 def write_stream(
     stream: BaseStream,
     outfile: Union[IO, TextIO],
-    flush: bool
+    flush: bool,
+    sanitize: bool = False,
 ):
-    """Write the output stream."""
+    """Write the output stream.
+
+    If ``sanitize`` is True, dangerous terminal control sequences
+    are stripped from each chunk before writing.  This is enabled
+    for TTY output to prevent HTTP response data from injecting
+    escape sequences that manipulate the terminal.
+
+    """
     try:
         # Writing bytes so we use the buffer interface.
         buf = outfile.buffer
@@ -71,6 +81,8 @@ def write_stream(
         buf = outfile
 
     for chunk in stream:
+        if sanitize:
+            chunk = sanitize_output(chunk)
         buf.write(chunk)
         if flush:
             outfile.flush()
@@ -79,7 +91,8 @@ def write_stream(
 def write_stream_with_colors_win(
     stream: 'BaseStream',
     outfile: TextIO,
-    flush: bool
+    flush: bool,
+    sanitize: bool = False,
 ):
     """Like `write`, but colorized chunks are written as text
     directly to `outfile` to ensure it gets processed by colorama.
@@ -89,6 +102,8 @@ def write_stream_with_colors_win(
     color = b'\x1b['
     encoding = outfile.encoding
     for chunk in stream:
+        if sanitize:
+            chunk = sanitize_output(chunk)
         if color in chunk:
             outfile.write(chunk.decode(encoding))
         else:
