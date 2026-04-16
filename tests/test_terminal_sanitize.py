@@ -3,7 +3,6 @@ Tests for terminal escape sequence sanitization.
 
 See: https://github.com/httpie/cli/issues/1812
 """
-import pytest
 import responses
 
 from httpie.output.sanitize import sanitize_output
